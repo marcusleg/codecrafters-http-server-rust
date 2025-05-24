@@ -1,9 +1,12 @@
 use clap::Parser;
+use http_status::HttpStatus;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::OnceLock;
 use std::thread;
+
+mod http_status;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -16,34 +19,6 @@ struct HttpRequest {
     method: String,
     path: String,
     headers: HashMap<String, String>,
-}
-
-struct HttpStatus {
-    code: u16,
-    text: &'static str,
-}
-
-impl HttpStatus {
-    const OK: HttpStatus = HttpStatus {
-        code: 200,
-        text: "OK",
-    };
-    const BAD_REQUEST: HttpStatus = HttpStatus {
-        code: 400,
-        text: "Bad Request",
-    };
-    const NOT_FOUND: HttpStatus = HttpStatus {
-        code: 404,
-        text: "Not Found",
-    };
-    const METHOD_NOT_ALLOWED: HttpStatus = HttpStatus {
-        code: 405,
-        text: "Method Not Allowed",
-    };
-    const INTERNAL_SERVER_ERROR: HttpStatus = HttpStatus {
-        code: 500,
-        text: "Internal Server Error",
-    };
 }
 
 static FILES_DIRECTORY: OnceLock<Option<String>> = OnceLock::new();
