@@ -86,7 +86,7 @@ fn handle_request(
     match method.to_uppercase().as_str() {
         "GET" => {
             if path == "/" || path == "/index.html" {
-                send_response(stream, 200, None);
+                send_response(stream, 200, None, None);
             } else if path.starts_with("/echo/") {
                 handle_get_echo(stream, path);
             } else if path.starts_with("/files/") {
@@ -94,14 +94,19 @@ fn handle_request(
             } else if path == "/user-agent" {
                 handle_get_user_agent(stream, headers);
             } else {
-                send_response(stream, 404, None);
+                send_response(stream, 404, None, None);
             }
         }
-        _ => send_response(stream, 405, None),
+        _ => send_response(stream, 405, None, None),
     }
 }
 
-fn send_response(stream: &mut TcpStream, status_code: usize, body: Option<&str>) {
+fn send_response(
+    stream: &mut TcpStream,
+    status_code: usize,
+    content_type: Option<&str>,
+    body: Option<&str>,
+) {
     let status_text = match status_code {
         200 => "OK",
         400 => "Bad Request",
@@ -112,20 +117,21 @@ fn send_response(stream: &mut TcpStream, status_code: usize, body: Option<&str>)
     };
 
     let response;
+    let content_type = content_type.unwrap_or("text/plain");
 
     match body {
         None => {
             response = format!(
-                "HTTP/1.1 {} {}\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n",
-                status_code, status_text
+                "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: 0\r\n\r\n",
+                status_code, status_text, content_type
             )
         }
         Some(_) => {
             let response_body = body.unwrap();
             let content_length = response_body.len();
             response = format!(
-                "HTTP/1.1 {} {}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-                status_code, status_text, content_length, response_body
+                "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n{}",
+                status_code, status_text, content_type, content_length, response_body
             )
         }
     }
@@ -136,7 +142,7 @@ fn send_response(stream: &mut TcpStream, status_code: usize, body: Option<&str>)
 fn handle_get_echo(stream: &mut TcpStream, path: &str) {
     let response_body = path.strip_prefix("/echo/").unwrap();
 
-    send_response(stream, 200, Some(response_body));
+    send_response(stream, 200, Some(response_body), None);
 }
 
 fn handle_get_files(stream: &mut TcpStream, path: &str) {
@@ -146,13 +152,18 @@ fn handle_get_files(stream: &mut TcpStream, path: &str) {
 
     match std::fs::read_to_string(&file_path) {
         Ok(contents) => {
-            send_response(stream, 200, Some(&contents));
+            send_response(
+                stream,
+                200,
+                Some("application/octet-stream"),
+                Some(&contents),
+            );
         }
         Err(e) => {
             if e.kind() == std::io::ErrorKind::NotFound {
-                send_response(stream, 404, None);
+                send_response(stream, 404, None, None);
             } else {
-                send_response(stream, 500, None);
+                send_response(stream, 500, None, None);
             }
         }
     }
@@ -163,10 +174,10 @@ fn handle_get_user_agent(stream: &mut TcpStream, headers: &HashMap<String, Strin
 
     match user_agent {
         None => {
-            send_response(stream, 400, None);
+            send_response(stream, 400, None, None);
         }
         Some(user_agent) => {
-            send_response(stream, 200, Some(user_agent));
+            send_response(stream, 200, Some("text/plain"), Some(user_agent));
         }
     }
 }
