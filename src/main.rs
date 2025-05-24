@@ -56,14 +56,18 @@ fn handle_connection(stream: &mut TcpStream) {
 
 fn handle_request(method: &str, path: &str, stream: &mut TcpStream) {
     match method.to_uppercase().as_str() {
-        "GET" => match path {
-            "/" | "/index.html" => {
+        "GET" => {
+            if path == "/" || path == "/index.html" {
                 stream.write_all(b"HTTP/1.1 200 OK\r\n\r\n").unwrap();
-            }
-            _ => {
+            } else if path.starts_with("/echo/") {
+                let response_body = path.strip_prefix("/echo/");
+                stream
+                    .write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", response_body.unwrap().len(), response_body.unwrap()).as_bytes())
+                    .unwrap()
+            } else {
                 stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n").unwrap();
             }
-        },
+        }
         _ => {
             stream
                 .write_all(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n")
