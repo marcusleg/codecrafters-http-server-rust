@@ -60,10 +60,15 @@ fn handle_request(method: &str, path: &str, stream: &mut TcpStream) {
             if path == "/" || path == "/index.html" {
                 stream.write_all(b"HTTP/1.1 200 OK\r\n\r\n").unwrap();
             } else if path.starts_with("/echo/") {
-                let response_body = path.strip_prefix("/echo/");
-                stream
-                    .write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}", response_body.unwrap().len(), response_body.unwrap()).as_bytes())
-                    .unwrap()
+                let response_body = path.strip_prefix("/echo/").unwrap();
+
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                    response_body.len(),
+                    response_body
+                );
+
+                stream.write_all(response.as_bytes()).unwrap()
             } else {
                 stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n").unwrap();
             }
