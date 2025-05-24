@@ -3,6 +3,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::thread;
 
+static FILE_DIRECTORY: &str = "/tmp";
+
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
@@ -75,6 +77,8 @@ fn handle_request(
                 send_response(stream, 200, None);
             } else if path.starts_with("/echo/") {
                 handle_get_echo(stream, path);
+            } else if path.starts_with("/files/") {
+                handle_get_files(stream, path);
             } else if path == "/user-agent" {
                 handle_get_user_agent(stream, headers);
             } else {
@@ -91,6 +95,7 @@ fn send_response(stream: &mut TcpStream, status_code: usize, body: Option<&str>)
         400 => "Bad Request",
         404 => "Not Found",
         405 => "Method Not Allowed",
+        500 => "Internal Server Error",
         _ => todo!(),
     };
 
@@ -120,6 +125,24 @@ fn handle_get_echo(stream: &mut TcpStream, path: &str) {
     let response_body = path.strip_prefix("/echo/").unwrap();
 
     send_response(stream, 200, Some(response_body));
+}
+
+fn handle_get_files(stream: &mut TcpStream, path: &str) {
+    let file_name = path.strip_prefix("/files/").unwrap();
+    let file_path = format!("{}/{}", FILE_DIRECTORY, file_name);
+
+    match std::fs::read_to_string(&file_path) {
+        Ok(contents) => {
+            send_response(stream, 200, Some(&contents));
+        }
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                send_response(stream, 404, None);
+            } else {
+                send_response(stream, 500, None);
+            }
+        }
+    }
 }
 
 fn handle_get_user_agent(stream: &mut TcpStream, headers: &HashMap<String, String>) {
