@@ -1,11 +1,23 @@
+use clap::Parser;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::OnceLock;
 use std::thread;
 
-static FILE_DIRECTORY: &str = "/tmp";
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long)]
+    directory: String,
+}
+
+static FILES_DIRECTORY: OnceLock<String> = OnceLock::new();
 
 fn main() {
+    let args = Args::parse();
+    FILES_DIRECTORY.set(args.directory).unwrap();
+
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
     for stream in listener.incoming() {
@@ -128,8 +140,9 @@ fn handle_get_echo(stream: &mut TcpStream, path: &str) {
 }
 
 fn handle_get_files(stream: &mut TcpStream, path: &str) {
+    let files_directory = FILES_DIRECTORY.get().unwrap();
     let file_name = path.strip_prefix("/files/").unwrap();
-    let file_path = format!("{}/{}", FILE_DIRECTORY, file_name);
+    let file_path = format!("{}/{}", files_directory, file_name);
 
     match std::fs::read_to_string(&file_path) {
         Ok(contents) => {
