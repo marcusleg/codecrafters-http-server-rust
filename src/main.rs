@@ -45,6 +45,11 @@ fn main() {
 }
 
 fn handle_connection(stream: &mut TcpStream) {
+    let request = parse_request(stream);
+    handle_request(stream, &request);
+}
+
+fn parse_request(stream: &mut TcpStream) -> HttpRequest {
     let mut request = HttpRequest {
         method: String::new(),
         path: String::new(),
@@ -87,7 +92,7 @@ fn handle_connection(stream: &mut TcpStream) {
         line_count = line_count + 1;
     }
 
-    handle_request(stream, &request);
+    request
 }
 
 fn handle_request(stream: &mut TcpStream, request: &HttpRequest) {
