@@ -9,10 +9,10 @@ use std::thread;
 #[command(version, about, long_about = None)]
 struct Args {
     #[arg(short, long)]
-    directory: String,
+    directory: Option<String>,
 }
 
-static FILES_DIRECTORY: OnceLock<String> = OnceLock::new();
+static FILES_DIRECTORY: OnceLock<Option<String>> = OnceLock::new();
 
 fn main() {
     let args = Args::parse();
@@ -147,6 +147,12 @@ fn handle_get_echo(stream: &mut TcpStream, path: &str) {
 
 fn handle_get_files(stream: &mut TcpStream, path: &str) {
     let files_directory = FILES_DIRECTORY.get().unwrap();
+    if files_directory.is_none() {
+        send_response(stream, 404, None, None);
+        return;
+    }
+    let files_directory = files_directory.as_ref().unwrap();
+
     let file_name = path.strip_prefix("/files/").unwrap();
     let file_path = format!("{}/{}", files_directory, file_name);
 
