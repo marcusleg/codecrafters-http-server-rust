@@ -82,7 +82,12 @@ fn send_response(stream: &mut TcpStream, status_code: usize, body: Option<&str>)
     let response;
 
     match body {
-        None => response = format!("HTTP/1.1 {} {}\r\n", status_code, status_text),
+        None => {
+            response = format!(
+                "HTTP/1.1 {} {}\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n",
+                status_code, status_text
+            )
+        }
         Some(_) => {
             let response_body = body.unwrap();
             let content_length = response_body.len();
