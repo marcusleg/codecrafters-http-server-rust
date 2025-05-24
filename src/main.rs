@@ -142,7 +142,7 @@ fn send_response(
 fn handle_get_echo(stream: &mut TcpStream, path: &str) {
     let response_body = path.strip_prefix("/echo/").unwrap();
 
-    send_response(stream, 200, Some(response_body), None);
+    send_response(stream, 200, Some("text/plain"), Some(response_body));
 }
 
 fn handle_get_files(stream: &mut TcpStream, path: &str) {
