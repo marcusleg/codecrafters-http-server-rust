@@ -57,7 +57,7 @@ fn handle_connection(stream: &mut TcpStream) {
 fn handle_request(method: &str, path: &str, stream: &mut TcpStream) {
     match method.to_uppercase().as_str() {
         "GET" => match path {
-            "/index.html" => {
+            "/" | "/index.html" => {
                 stream.write_all(b"HTTP/1.1 200 OK\r\n\r\n").unwrap();
             }
             _ => {
