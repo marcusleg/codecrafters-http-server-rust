@@ -58,25 +58,40 @@ fn handle_request(method: &str, path: &str, stream: &mut TcpStream) {
     match method.to_uppercase().as_str() {
         "GET" => {
             if path == "/" || path == "/index.html" {
-                stream.write_all(b"HTTP/1.1 200 OK\r\n\r\n").unwrap();
+                send_response(stream, 200, None);
             } else if path.starts_with("/echo/") {
                 let response_body = path.strip_prefix("/echo/").unwrap();
 
-                let response = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
-                    response_body.len(),
-                    response_body
-                );
-
-                stream.write_all(response.as_bytes()).unwrap()
+                send_response(stream, 200, Some(response_body));
             } else {
-                stream.write_all(b"HTTP/1.1 404 Not Found\r\n\r\n").unwrap();
+                send_response(stream, 404, None);
             }
         }
-        _ => {
-            stream
-                .write_all(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n")
-                .unwrap();
+        _ => send_response(stream, 405, None),
+    }
+}
+
+fn send_response(stream: &mut TcpStream, status_code: usize, body: Option<&str>) {
+    let status_text = match status_code {
+        200 => "OK",
+        404 => "Page Not Found",
+        405 => "Method Not Allowed",
+        _ => todo!(),
+    };
+
+    let response;
+
+    match body {
+        None => response = format!("HTTP/1.1 {} {}\r\n", status_code, status_text),
+        Some(_) => {
+            let response_body = body.unwrap();
+            let content_length = response_body.len();
+            response = format!(
+                "HTTP/1.1 {} {}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{}",
+                status_code, status_text, content_length, response_body
+            )
         }
     }
+
+    stream.write_all(response.as_bytes()).unwrap();
 }
