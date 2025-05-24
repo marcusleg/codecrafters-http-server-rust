@@ -18,6 +18,34 @@ struct HttpRequest {
     headers: HashMap<String, String>,
 }
 
+struct HttpStatus {
+    code: u16,
+    text: &'static str,
+}
+
+impl HttpStatus {
+    const OK: HttpStatus = HttpStatus {
+        code: 200,
+        text: "OK",
+    };
+    const BAD_REQUEST: HttpStatus = HttpStatus {
+        code: 400,
+        text: "Bad Request",
+    };
+    const NOT_FOUND: HttpStatus = HttpStatus {
+        code: 404,
+        text: "Not Found",
+    };
+    const METHOD_NOT_ALLOWED: HttpStatus = HttpStatus {
+        code: 405,
+        text: "Method Not Allowed",
+    };
+    const INTERNAL_SERVER_ERROR: HttpStatus = HttpStatus {
+        code: 500,
+        text: "Internal Server Error",
+    };
+}
+
 static FILES_DIRECTORY: OnceLock<Option<String>> = OnceLock::new();
 
 fn main() {
@@ -91,7 +119,7 @@ fn handle_request(stream: &mut TcpStream, request: &HttpRequest) {
     match request.method.to_uppercase().as_str() {
         "GET" => {
             if request.path == "/" || request.path == "/index.html" {
-                send_response(stream, 200, None, None);
+                send_response(stream, HttpStatus::OK, None, None);
             } else if request.path.starts_with("/echo/") {
                 handle_get_echo(stream, &request);
             } else if request.path.starts_with("/files/") {
@@ -99,28 +127,19 @@ fn handle_request(stream: &mut TcpStream, request: &HttpRequest) {
             } else if request.path == "/user-agent" {
                 handle_get_user_agent(stream, &request);
             } else {
-                send_response(stream, 404, None, None);
+                send_response(stream, HttpStatus::NOT_FOUND, None, None);
             }
         }
-        _ => send_response(stream, 405, None, None),
+        _ => send_response(stream, HttpStatus::METHOD_NOT_ALLOWED, None, None),
     }
 }
 
 fn send_response(
     stream: &mut TcpStream,
-    status_code: usize,
+    status: HttpStatus,
     content_type: Option<&str>,
     body: Option<&str>,
 ) {
-    let status_text = match status_code {
-        200 => "OK",
-        400 => "Bad Request",
-        404 => "Not Found",
-        405 => "Method Not Allowed",
-        500 => "Internal Server Error",
-        _ => todo!(),
-    };
-
     let response;
     let content_type = content_type.unwrap_or("text/plain");
 
@@ -128,7 +147,7 @@ fn send_response(
         None => {
             response = format!(
                 "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: 0\r\n\r\n",
-                status_code, status_text, content_type
+                status.code, status.text, content_type
             )
         }
         Some(_) => {
@@ -136,7 +155,7 @@ fn send_response(
             let content_length = response_body.len();
             response = format!(
                 "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n{}",
-                status_code, status_text, content_type, content_length, response_body
+                status.code, status.text, content_type, content_length, response_body
             )
         }
     }
@@ -147,13 +166,18 @@ fn send_response(
 fn handle_get_echo(stream: &mut TcpStream, request: &HttpRequest) {
     let response_body = request.path.strip_prefix("/echo/").unwrap();
 
-    send_response(stream, 200, Some("text/plain"), Some(response_body));
+    send_response(
+        stream,
+        HttpStatus::OK,
+        Some("text/plain"),
+        Some(response_body),
+    );
 }
 
 fn handle_get_files(stream: &mut TcpStream, request: &HttpRequest) {
     let files_directory = FILES_DIRECTORY.get().unwrap();
     if files_directory.is_none() {
-        send_response(stream, 404, None, None);
+        send_response(stream, HttpStatus::NOT_FOUND, None, None);
         return;
     }
     let files_directory = files_directory.as_ref().unwrap();
@@ -165,16 +189,16 @@ fn handle_get_files(stream: &mut TcpStream, request: &HttpRequest) {
         Ok(contents) => {
             send_response(
                 stream,
-                200,
+                HttpStatus::OK,
                 Some("application/octet-stream"),
                 Some(&contents),
             );
         }
         Err(e) => {
             if e.kind() == std::io::ErrorKind::NotFound {
-                send_response(stream, 404, None, None);
+                send_response(stream, HttpStatus::NOT_FOUND, None, None);
             } else {
-                send_response(stream, 500, None, None);
+                send_response(stream, HttpStatus::INTERNAL_SERVER_ERROR, None, None);
             }
         }
     }
@@ -185,10 +209,10 @@ fn handle_get_user_agent(stream: &mut TcpStream, request: &HttpRequest) {
 
     match user_agent {
         None => {
-            send_response(stream, 400, None, None);
+            send_response(stream, HttpStatus::BAD_REQUEST, None, None);
         }
         Some(user_agent) => {
-            send_response(stream, 200, Some("text/plain"), Some(user_agent));
+            send_response(stream, HttpStatus::OK, Some("text/plain"), Some(user_agent));
         }
     }
 }
