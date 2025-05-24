@@ -71,20 +71,9 @@ fn handle_request(
             if path == "/" || path == "/index.html" {
                 send_response(stream, 200, None);
             } else if path.starts_with("/echo/") {
-                let response_body = path.strip_prefix("/echo/").unwrap();
-
-                send_response(stream, 200, Some(response_body));
+                handle_get_echo(stream, path);
             } else if path == "/user-agent" {
-                let user_agent = headers.get("user-agent");
-
-                match user_agent {
-                    None => {
-                        send_response(stream, 400, None);
-                    }
-                    Some(user_agent) => {
-                        send_response(stream, 200, Some(user_agent));
-                    }
-                }
+                handle_get_user_agent(stream, headers);
             } else {
                 send_response(stream, 404, None);
             }
@@ -122,4 +111,23 @@ fn send_response(stream: &mut TcpStream, status_code: usize, body: Option<&str>)
     }
 
     stream.write_all(response.as_bytes()).unwrap();
+}
+
+fn handle_get_echo(stream: &mut TcpStream, path: &str) {
+    let response_body = path.strip_prefix("/echo/").unwrap();
+
+    send_response(stream, 200, Some(response_body));
+}
+
+fn handle_get_user_agent(stream: &mut TcpStream, headers: &HashMap<String, String>) {
+    let user_agent = headers.get("user-agent");
+
+    match user_agent {
+        None => {
+            send_response(stream, 400, None);
+        }
+        Some(user_agent) => {
+            send_response(stream, 200, Some(user_agent));
+        }
+    }
 }
