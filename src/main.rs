@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 
@@ -20,6 +21,7 @@ fn main() {
 fn handle_connection(stream: &mut TcpStream) {
     let mut method = String::new();
     let mut path = String::new();
+    let mut headers: HashMap<String, String> = HashMap::new();
 
     let reader = BufReader::new(&*stream);
     let mut line_count: usize = 0;
@@ -38,6 +40,10 @@ fn handle_connection(stream: &mut TcpStream) {
                     path = parts[1].to_string();
                     println!("Received {} request for {}", method, path);
                 } else if line.contains(": ") {
+                    let parts: Vec<&str> = line.split(": ").collect();
+                    if parts.len() == 2 {
+                        headers.insert(parts[0].to_string().to_lowercase(), parts[1].to_string());
+                    }
                     println!("Received header: {}", line)
                 } else {
                     println!("Received unknown line: {}", line)
@@ -51,10 +57,15 @@ fn handle_connection(stream: &mut TcpStream) {
         line_count = line_count + 1;
     }
 
-    handle_request(&method, &path, stream);
+    handle_request(stream, &method, &path, &headers);
 }
 
-fn handle_request(method: &str, path: &str, stream: &mut TcpStream) {
+fn handle_request(
+    stream: &mut TcpStream,
+    method: &str,
+    path: &str,
+    headers: &HashMap<String, String>,
+) {
     match method.to_uppercase().as_str() {
         "GET" => {
             if path == "/" || path == "/index.html" {
@@ -63,6 +74,17 @@ fn handle_request(method: &str, path: &str, stream: &mut TcpStream) {
                 let response_body = path.strip_prefix("/echo/").unwrap();
 
                 send_response(stream, 200, Some(response_body));
+            } else if path == "/user-agent" {
+                let user_agent = headers.get("user-agent");
+
+                match user_agent {
+                    None => {
+                        send_response(stream, 400, None);
+                    }
+                    Some(user_agent) => {
+                        send_response(stream, 200, Some(user_agent));
+                    }
+                }
             } else {
                 send_response(stream, 404, None);
             }
@@ -74,6 +96,7 @@ fn handle_request(method: &str, path: &str, stream: &mut TcpStream) {
 fn send_response(stream: &mut TcpStream, status_code: usize, body: Option<&str>) {
     let status_text = match status_code {
         200 => "OK",
+        400 => "Bad Request",
         404 => "Not Found",
         405 => "Method Not Allowed",
         _ => todo!(),
