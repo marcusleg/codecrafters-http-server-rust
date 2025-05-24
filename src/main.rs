@@ -74,7 +74,7 @@ fn handle_request(method: &str, path: &str, stream: &mut TcpStream) {
 fn send_response(stream: &mut TcpStream, status_code: usize, body: Option<&str>) {
     let status_text = match status_code {
         200 => "OK",
-        404 => "Page Not Found",
+        404 => "Not Found",
         405 => "Method Not Allowed",
         _ => todo!(),
     };
