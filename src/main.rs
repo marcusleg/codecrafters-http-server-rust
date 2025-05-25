@@ -58,7 +58,8 @@ fn main() {
 
 fn handle_connection(stream: &mut TcpStream) {
     let request = parse_request(stream);
-    handle_request(stream, &request);
+    let response = handle_request(&request);
+    send_response(stream, response);
 }
 
 fn parse_request(stream: &mut TcpStream) -> HttpRequest {
@@ -107,43 +108,34 @@ fn parse_request(stream: &mut TcpStream) -> HttpRequest {
     request
 }
 
-fn handle_request(stream: &mut TcpStream, request: &HttpRequest) {
+fn handle_request(request: &HttpRequest) -> HttpResponse {
     match request.method.to_uppercase().as_str() {
         "GET" => {
             if request.path == "/" || request.path == "/index.html" {
-                send_response(
-                    stream,
-                    HttpResponse {
-                        status: HttpStatus::OK,
-                        headers: HashMap::new(),
-                        body: None,
-                    },
-                );
+                HttpResponse {
+                    status: HttpStatus::OK,
+                    headers: HashMap::new(),
+                    body: None,
+                }
             } else if request.path.starts_with("/echo/") {
-                handle_get_echo(stream, &request);
+                handle_get_echo(&request)
             } else if request.path.starts_with("/files/") {
-                handle_get_files(stream, &request);
+                handle_get_files(&request)
             } else if request.path == "/user-agent" {
-                handle_get_user_agent(stream, &request);
+                handle_get_user_agent(&request)
             } else {
-                send_response(
-                    stream,
-                    HttpResponse {
-                        status: HttpStatus::NOT_FOUND,
-                        headers: HashMap::new(),
-                        body: None,
-                    },
-                );
+                HttpResponse {
+                    status: HttpStatus::NOT_FOUND,
+                    headers: HashMap::new(),
+                    body: None,
+                }
             }
         }
-        _ => send_response(
-            stream,
-            HttpResponse {
-                status: HttpStatus::METHOD_NOT_ALLOWED,
-                headers: HashMap::new(),
-                body: None,
-            },
-        ),
+        _ => HttpResponse {
+            status: HttpStatus::METHOD_NOT_ALLOWED,
+            headers: HashMap::new(),
+            body: None,
+        },
     }
 }
 
@@ -192,31 +184,24 @@ fn send_response(stream: &mut TcpStream, mut response: HttpResponse) {
     };
 }
 
-fn handle_get_echo(stream: &mut TcpStream, request: &HttpRequest) {
+fn handle_get_echo(request: &HttpRequest) -> HttpResponse {
     let response_body = request.path.strip_prefix("/echo/").unwrap();
 
-    send_response(
-        stream,
-        HttpResponse {
-            status: HttpStatus::OK,
-            headers: HashMap::from([("Content-Type".to_string(), "text/plain".to_string())]),
-            body: Some(HttpBody::Text(response_body.to_string())),
-        },
-    );
+    HttpResponse {
+        status: HttpStatus::OK,
+        headers: HashMap::from([("Content-Type".to_string(), "text/plain".to_string())]),
+        body: Some(HttpBody::Text(response_body.to_string())),
+    }
 }
 
-fn handle_get_files(stream: &mut TcpStream, request: &HttpRequest) {
+fn handle_get_files(request: &HttpRequest) -> HttpResponse {
     let files_directory = FILES_DIRECTORY.get().unwrap();
     if files_directory.is_none() {
-        send_response(
-            stream,
-            HttpResponse {
-                status: HttpStatus::NOT_FOUND,
-                headers: HashMap::new(),
-                body: None,
-            },
-        );
-        return;
+        return HttpResponse {
+            status: HttpStatus::NOT_FOUND,
+            headers: HashMap::new(),
+            body: None,
+        };
     }
     let files_directory = files_directory.as_ref().unwrap();
 
@@ -224,69 +209,45 @@ fn handle_get_files(stream: &mut TcpStream, request: &HttpRequest) {
     let file_path = format!("{}/{}", files_directory, file_name);
 
     match std::fs::read(&file_path) {
-        Ok(contents) => {
-            send_response(
-                stream,
-                HttpResponse {
-                    status: HttpStatus::OK,
-                    headers: HashMap::from([(
-                        "Content-Type".to_string(),
-                        "application/octet-stream".to_string(),
-                    )]),
-                    body: Some(HttpBody::Binary(contents)),
-                },
-            );
-        }
+        Ok(contents) => HttpResponse {
+            status: HttpStatus::OK,
+            headers: HashMap::from([(
+                "Content-Type".to_string(),
+                "application/octet-stream".to_string(),
+            )]),
+            body: Some(HttpBody::Binary(contents)),
+        },
         Err(e) => {
             if e.kind() == std::io::ErrorKind::NotFound {
-                send_response(
-                    stream,
-                    HttpResponse {
-                        status: HttpStatus::NOT_FOUND,
-                        headers: HashMap::new(),
-                        body: None,
-                    },
-                );
+                HttpResponse {
+                    status: HttpStatus::NOT_FOUND,
+                    headers: HashMap::new(),
+                    body: None,
+                }
             } else {
-                send_response(
-                    stream,
-                    HttpResponse {
-                        status: HttpStatus::INTERNAL_SERVER_ERROR,
-                        headers: HashMap::new(),
-                        body: None,
-                    },
-                );
+                HttpResponse {
+                    status: HttpStatus::INTERNAL_SERVER_ERROR,
+                    headers: HashMap::new(),
+                    body: None,
+                }
             }
         }
     }
 }
 
-fn handle_get_user_agent(stream: &mut TcpStream, request: &HttpRequest) {
+fn handle_get_user_agent(request: &HttpRequest) -> HttpResponse {
     let user_agent = request.headers.get("user-agent");
 
     match user_agent {
-        None => {
-            send_response(
-                stream,
-                HttpResponse {
-                    status: HttpStatus::BAD_REQUEST,
-                    headers: HashMap::new(),
-                    body: None,
-                },
-            );
-        }
-        Some(user_agent) => {
-            send_response(
-                stream,
-                HttpResponse {
-                    status: HttpStatus::OK,
-                    headers: HashMap::from([(
-                        "Content-Type".to_string(),
-                        "text/plain".to_string(),
-                    )]),
-                    body: Some(HttpBody::Text(user_agent.to_string())),
-                },
-            );
-        }
+        None => HttpResponse {
+            status: HttpStatus::BAD_REQUEST,
+            headers: HashMap::new(),
+            body: None,
+        },
+        Some(user_agent) => HttpResponse {
+            status: HttpStatus::OK,
+            headers: HashMap::from([("Content-Type".to_string(), "text/plain".to_string())]),
+            body: Some(HttpBody::Text(user_agent.to_string())),
+        },
     }
 }
