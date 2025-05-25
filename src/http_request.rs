@@ -9,6 +9,12 @@ pub struct HttpRequest {
     pub(crate) headers: HashMap<String, String>,
 }
 
+struct RequestLine {
+    method: String,
+    path: String,
+    protocol: String,
+}
+
 pub fn parse(stream: &mut TcpStream) -> Result<HttpRequest> {
     let mut request = HttpRequest {
         method: String::new(),
@@ -24,8 +30,8 @@ pub fn parse(stream: &mut TcpStream) -> Result<HttpRequest> {
         .ok_or_else(|| anyhow::anyhow!("Failed to read request line"))??;
     let parsed_request_line =
         parse_request_line(request_line).context("Failed to parse request line")?;
-    request.method = parsed_request_line.0;
-    request.path = parsed_request_line.1;
+    request.method = parsed_request_line.method;
+    request.path = parsed_request_line.path;
     println!("Received {} request for {}", request.method, request.path);
 
     for line in lines {
@@ -55,13 +61,14 @@ pub fn parse(stream: &mut TcpStream) -> Result<HttpRequest> {
     Ok(request)
 }
 
-fn parse_request_line(request_line: String) -> Result<(String, String)> {
+fn parse_request_line(request_line: String) -> Result<RequestLine> {
     let parts: Vec<&str> = request_line.split(" ").collect();
-    if parts.len() >= 2 {
-        Ok((
-            parts.get(0).unwrap().to_string(),
-            parts.get(1).unwrap().to_string(),
-        ))
+    if parts.len() == 3 {
+        Ok(RequestLine {
+            method: parts.get(0).unwrap().to_string(),
+            path: parts.get(1).unwrap().to_string(),
+            protocol: parts.get(2).unwrap().to_string(),
+        })
     } else {
         Err(anyhow!("Invalid request line: {}", request_line))
     }
