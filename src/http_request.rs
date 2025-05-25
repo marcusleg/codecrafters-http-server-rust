@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
@@ -8,7 +9,7 @@ pub struct HttpRequest {
     pub(crate) headers: HashMap<String, String>,
 }
 
-pub fn parse(stream: &mut TcpStream) -> HttpRequest {
+pub fn parse(stream: &mut TcpStream) -> Result<HttpRequest> {
     let mut request = HttpRequest {
         method: String::new(),
         path: String::new(),
@@ -16,21 +17,26 @@ pub fn parse(stream: &mut TcpStream) -> HttpRequest {
     };
 
     let reader = BufReader::new(&*stream);
-    let mut line_count: usize = 0;
-    for line in reader.lines() {
+    let mut lines = reader.lines();
+
+    let request_line = lines
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("Failed to read request line"))??;
+    let parts: Vec<&str> = request_line.split(" ").collect();
+    if parts.len() >= 2 {
+        request.method = parts.get(0).unwrap().to_string();
+        request.path = parts.get(1).unwrap().to_string();
+
+        println!("Received {} request for {}", request.method, request.path);
+    } else {
+        return Err(anyhow!("Invalid request line: {}", request_line));
+    }
+
+    for line in lines {
         match line {
             Ok(line) => {
                 if line.trim().is_empty() {
                     break;
-                } else if line_count == 0 {
-                    let parts: Vec<&str> = line.split(" ").collect();
-                    if parts.len() < 2 {
-                        println!("Invalid HTTP request received.");
-                        break;
-                    }
-                    request.method = parts[0].to_string();
-                    request.path = parts[1].to_string();
-                    println!("Received {} request for {}", request.method, request.path);
                 } else if line.contains(": ") {
                     let parts: Vec<&str> = line.split(": ").collect();
                     if parts.len() == 2 {
@@ -48,8 +54,7 @@ pub fn parse(stream: &mut TcpStream) -> HttpRequest {
                 break;
             }
         }
-        line_count = line_count + 1;
     }
 
-    request
+    Ok(request)
 }
