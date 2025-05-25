@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{Context, Result};
 use clap::Parser;
 use http_request::HttpRequest;
 use http_response::HttpResponse;
@@ -53,19 +53,23 @@ fn handle_connection(stream: &mut TcpStream) {
     let request = http_request::parse(stream)
         .context("Failed to parse HTTP request")
         .unwrap();
-    let response = handle_request(&request);
+    let response = handle_request(&request).unwrap_or_else(|_| HttpResponse {
+        status: HttpStatus::INTERNAL_SERVER_ERROR,
+        headers: HashMap::new(),
+        body: None,
+    });
     http_response::send(stream, response);
 }
 
-fn handle_request(request: &HttpRequest) -> HttpResponse {
+fn handle_request(request: &HttpRequest) -> Result<HttpResponse> {
     match request.method.to_uppercase().as_str() {
         "GET" => {
             if request.path == "/" || request.path == "/index.html" {
-                HttpResponse {
+                Ok(HttpResponse {
                     status: HttpStatus::OK,
                     headers: HashMap::new(),
                     body: None,
-                }
+                })
             } else if request.path.starts_with("/echo/") {
                 handle_get_echo(&request)
             } else if request.path.starts_with("/files/") {
@@ -73,120 +77,133 @@ fn handle_request(request: &HttpRequest) -> HttpResponse {
             } else if request.path == "/user-agent" {
                 handle_get_user_agent(&request)
             } else {
-                HttpResponse {
+                Ok(HttpResponse {
                     status: HttpStatus::NOT_FOUND,
                     headers: HashMap::new(),
                     body: None,
-                }
+                })
             }
         }
         "POST" => {
             if request.path.starts_with("/files/") {
                 handle_post_files(&request)
             } else {
-                HttpResponse {
+                Ok(HttpResponse {
                     status: HttpStatus::NOT_FOUND,
                     headers: HashMap::new(),
                     body: None,
-                }
+                })
             }
         }
-        _ => HttpResponse {
+        _ => Ok(HttpResponse {
             status: HttpStatus::METHOD_NOT_ALLOWED,
             headers: HashMap::new(),
             body: None,
-        },
+        }),
     }
 }
 
-fn handle_get_echo(request: &HttpRequest) -> HttpResponse {
-    let response_body = request.path.strip_prefix("/echo/").unwrap();
+fn handle_get_echo(request: &HttpRequest) -> Result<HttpResponse> {
+    let response_body = request
+        .path
+        .strip_prefix("/echo/")
+        .context("Failed to strip prefix")?;
 
-    HttpResponse {
+    Ok(HttpResponse {
         status: HttpStatus::OK,
         headers: HashMap::from([("Content-Type".to_string(), "text/plain".to_string())]),
         body: Some(HttpBody::Text(response_body.to_string())),
-    }
+    })
 }
 
-fn handle_get_files(request: &HttpRequest) -> HttpResponse {
+fn handle_get_files(request: &HttpRequest) -> Result<HttpResponse> {
     let files_directory = FILES_DIRECTORY.get().unwrap();
     if files_directory.is_none() {
-        return HttpResponse {
+        return Ok(HttpResponse {
             status: HttpStatus::NOT_FOUND,
             headers: HashMap::new(),
             body: None,
-        };
+        });
     }
-    let files_directory = files_directory.as_ref().unwrap();
+    let files_directory = files_directory
+        .as_ref()
+        .context("Failed to get files directory")?;
 
-    let file_name = request.path.strip_prefix("/files/").unwrap();
+    let file_name = request
+        .path
+        .strip_prefix("/files/")
+        .context("Failed to strip prefix")?;
     let file_path = format!("{}/{}", files_directory, file_name);
 
     match std::fs::read(&file_path) {
-        Ok(contents) => HttpResponse {
+        Ok(contents) => Ok(HttpResponse {
             status: HttpStatus::OK,
             headers: HashMap::from([(
                 "Content-Type".to_string(),
                 "application/octet-stream".to_string(),
             )]),
             body: Some(HttpBody::Binary(contents)),
-        },
+        }),
         Err(e) => {
             if e.kind() == std::io::ErrorKind::NotFound {
-                HttpResponse {
+                Ok(HttpResponse {
                     status: HttpStatus::NOT_FOUND,
                     headers: HashMap::new(),
                     body: None,
-                }
+                })
             } else {
-                HttpResponse {
-                    status: HttpStatus::INTERNAL_SERVER_ERROR,
-                    headers: HashMap::new(),
-                    body: None,
-                }
+                Err(e).context("Failed to read file")?
             }
         }
     }
 }
 
-fn handle_get_user_agent(request: &HttpRequest) -> HttpResponse {
-    let user_agent = request.headers.get("user-agent");
+fn handle_get_user_agent(request: &HttpRequest) -> Result<HttpResponse> {
+    let user_agent = request
+        .headers
+        .get("user-agent")
+        .context("Failed to get user agent")?;
 
-    match user_agent {
-        None => HttpResponse {
-            status: HttpStatus::BAD_REQUEST,
-            headers: HashMap::new(),
-            body: None,
-        },
-        Some(user_agent) => HttpResponse {
-            status: HttpStatus::OK,
-            headers: HashMap::from([("Content-Type".to_string(), "text/plain".to_string())]),
-            body: Some(HttpBody::Text(user_agent.to_string())),
-        },
-    }
+    Ok(HttpResponse {
+        status: HttpStatus::OK,
+        headers: HashMap::from([("Content-Type".to_string(), "text/plain".to_string())]),
+        body: Some(HttpBody::Text(user_agent.to_string())),
+    })
 }
 
-fn handle_post_files(request: &HttpRequest) -> HttpResponse {
-    if request.headers.get("content-type").unwrap() != "application/octet-stream" {
-        return HttpResponse {
+fn handle_post_files(request: &HttpRequest) -> Result<HttpResponse> {
+    if request
+        .headers
+        .get("content-type")
+        .context("Failed to get content type")?
+        != "application/octet-stream"
+    {
+        return Ok(HttpResponse {
             status: HttpStatus::BAD_REQUEST,
             headers: HashMap::new(),
             body: None,
-        };
+        });
     }
 
-    let file_name = request.path.strip_prefix("/files/").unwrap();
-    let files_directory = FILES_DIRECTORY.get().unwrap();
-    let files_directory = files_directory.as_ref().unwrap();
+    let file_name = request
+        .path
+        .strip_prefix("/files/")
+        .context("Failed to strip prefix")?;
+    let files_directory = FILES_DIRECTORY
+        .get()
+        .context("Failed to get files directory")?;
+    let files_directory = files_directory
+        .as_ref()
+        .context("Failed to get files directory")?;
     let file_path = format!("{}/{}", files_directory, file_name);
 
-    let mut file = std::fs::File::create(&file_path).unwrap();
-    file.write_all(request.body.as_ref().unwrap()).unwrap();
+    let mut file = std::fs::File::create(&file_path).context("Failed to create file")?;
+    file.write_all(request.body.as_ref().unwrap())
+        .context("Failed to write file")?;
 
-    HttpResponse {
+    Ok(HttpResponse {
         status: HttpStatus::CREATED,
         headers: HashMap::new(),
         body: None,
-    }
+    })
 }
