@@ -1,6 +1,7 @@
 use clap::Parser;
 use http_status::HttpStatus;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::OnceLock;
@@ -19,6 +20,17 @@ struct HttpRequest {
     method: String,
     path: String,
     headers: HashMap<String, String>,
+}
+
+enum HttpBody {
+    Text(String),
+    Binary(Vec<u8>),
+}
+
+struct HttpResponse {
+    status: HttpStatus,
+    headers: HashMap<String, String>,
+    body: Option<HttpBody>,
 }
 
 static FILES_DIRECTORY: OnceLock<Option<String>> = OnceLock::new();
@@ -99,7 +111,14 @@ fn handle_request(stream: &mut TcpStream, request: &HttpRequest) {
     match request.method.to_uppercase().as_str() {
         "GET" => {
             if request.path == "/" || request.path == "/index.html" {
-                send_response(stream, HttpStatus::OK, None, None);
+                send_response(
+                    stream,
+                    HttpResponse {
+                        status: HttpStatus::OK,
+                        headers: HashMap::new(),
+                        body: None,
+                    },
+                );
             } else if request.path.starts_with("/echo/") {
                 handle_get_echo(stream, &request);
             } else if request.path.starts_with("/files/") {
@@ -107,40 +126,69 @@ fn handle_request(stream: &mut TcpStream, request: &HttpRequest) {
             } else if request.path == "/user-agent" {
                 handle_get_user_agent(stream, &request);
             } else {
-                send_response(stream, HttpStatus::NOT_FOUND, None, None);
+                send_response(
+                    stream,
+                    HttpResponse {
+                        status: HttpStatus::NOT_FOUND,
+                        headers: HashMap::new(),
+                        body: None,
+                    },
+                );
             }
         }
-        _ => send_response(stream, HttpStatus::METHOD_NOT_ALLOWED, None, None),
+        _ => send_response(
+            stream,
+            HttpResponse {
+                status: HttpStatus::METHOD_NOT_ALLOWED,
+                headers: HashMap::new(),
+                body: None,
+            },
+        ),
     }
 }
 
-fn send_response(
-    stream: &mut TcpStream,
-    status: HttpStatus,
-    content_type: Option<&str>,
-    body: Option<&str>,
-) {
-    let response;
-    let content_type = content_type.unwrap_or("text/plain");
-
-    match body {
-        None => {
-            response = format!(
-                "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: 0\r\n\r\n",
-                status.code, status.text, content_type
-            )
-        }
-        Some(_) => {
-            let response_body = body.unwrap();
-            let content_length = response_body.len();
-            response = format!(
-                "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n{}",
-                status.code, status.text, content_type, content_length, response_body
-            )
-        }
+fn send_response(stream: &mut TcpStream, response: HttpResponse) {
+    let mut headers = response.headers;
+    if headers.get("Content-Type").is_none() {
+        headers.insert("Content-Type".to_string(), "text/plain".to_string());
     }
 
-    stream.write_all(response.as_bytes()).unwrap();
+    let response_string = match response.body {
+        None => {
+            headers.insert("Content-Length".to_string(), "0".to_string());
+
+            format!(
+                "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: 0\r\n\r\n",
+                response.status.code,
+                response.status.text,
+                headers.get("Content-Type").unwrap()
+            )
+        }
+        Some(HttpBody::Text(text)) => {
+            format!(
+                "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n{}",
+                response.status.code,
+                response.status.text,
+                headers.get("Content-Type").unwrap(),
+                text.len(),
+                text
+            )
+        }
+        Some(HttpBody::Binary(bytes)) => {
+            let response_headers = format!(
+                "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n",
+                response.status.code,
+                response.status.text,
+                headers.get("Content-Type").unwrap(),
+                bytes.len()
+            );
+            stream.write_all(response_headers.as_bytes()).unwrap();
+            stream.write_all(&bytes).unwrap();
+            return;
+        }
+    };
+
+    stream.write_all(response_string.as_bytes()).unwrap();
 }
 
 fn handle_get_echo(stream: &mut TcpStream, request: &HttpRequest) {
@@ -148,16 +196,25 @@ fn handle_get_echo(stream: &mut TcpStream, request: &HttpRequest) {
 
     send_response(
         stream,
-        HttpStatus::OK,
-        Some("text/plain"),
-        Some(response_body),
+        HttpResponse {
+            status: HttpStatus::OK,
+            headers: HashMap::from([("Content-Type".to_string(), "text/plain".to_string())]),
+            body: Some(HttpBody::Text(response_body.to_string())),
+        },
     );
 }
 
 fn handle_get_files(stream: &mut TcpStream, request: &HttpRequest) {
     let files_directory = FILES_DIRECTORY.get().unwrap();
     if files_directory.is_none() {
-        send_response(stream, HttpStatus::NOT_FOUND, None, None);
+        send_response(
+            stream,
+            HttpResponse {
+                status: HttpStatus::NOT_FOUND,
+                headers: HashMap::new(),
+                body: None,
+            },
+        );
         return;
     }
     let files_directory = files_directory.as_ref().unwrap();
@@ -165,20 +222,39 @@ fn handle_get_files(stream: &mut TcpStream, request: &HttpRequest) {
     let file_name = request.path.strip_prefix("/files/").unwrap();
     let file_path = format!("{}/{}", files_directory, file_name);
 
-    match std::fs::read_to_string(&file_path) {
+    match std::fs::read(&file_path) {
         Ok(contents) => {
             send_response(
                 stream,
-                HttpStatus::OK,
-                Some("application/octet-stream"),
-                Some(&contents),
+                HttpResponse {
+                    status: HttpStatus::OK,
+                    headers: HashMap::from([(
+                        "Content-Type".to_string(),
+                        "application/octet-stream".to_string(),
+                    )]),
+                    body: Some(HttpBody::Binary(contents)),
+                },
             );
         }
         Err(e) => {
             if e.kind() == std::io::ErrorKind::NotFound {
-                send_response(stream, HttpStatus::NOT_FOUND, None, None);
+                send_response(
+                    stream,
+                    HttpResponse {
+                        status: HttpStatus::NOT_FOUND,
+                        headers: HashMap::new(),
+                        body: None,
+                    },
+                );
             } else {
-                send_response(stream, HttpStatus::INTERNAL_SERVER_ERROR, None, None);
+                send_response(
+                    stream,
+                    HttpResponse {
+                        status: HttpStatus::INTERNAL_SERVER_ERROR,
+                        headers: HashMap::new(),
+                        body: None,
+                    },
+                );
             }
         }
     }
@@ -189,10 +265,27 @@ fn handle_get_user_agent(stream: &mut TcpStream, request: &HttpRequest) {
 
     match user_agent {
         None => {
-            send_response(stream, HttpStatus::BAD_REQUEST, None, None);
+            send_response(
+                stream,
+                HttpResponse {
+                    status: HttpStatus::BAD_REQUEST,
+                    headers: HashMap::new(),
+                    body: None,
+                },
+            );
         }
         Some(user_agent) => {
-            send_response(stream, HttpStatus::OK, Some("text/plain"), Some(user_agent));
+            send_response(
+                stream,
+                HttpResponse {
+                    status: HttpStatus::OK,
+                    headers: HashMap::from([(
+                        "Content-Type".to_string(),
+                        "text/plain".to_string(),
+                    )]),
+                    body: Some(HttpBody::Text(user_agent.to_string())),
+                },
+            );
         }
     }
 }
