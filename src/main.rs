@@ -1,3 +1,4 @@
+use anyhow::Context;
 use clap::Parser;
 use http_request::HttpRequest;
 use http_response::HttpResponse;
@@ -49,24 +50,11 @@ fn main() {
 }
 
 fn handle_connection(stream: &mut TcpStream) {
-    match http_request::parse(stream) {
-        Ok(request) => {
-            let response = handle_request(&request);
-            http_response::send(stream, response);
-        }
-        Err(err) => {
-            eprintln!("Failed to parse HTTP request: {}", err);
-
-            http_response::send(
-                stream,
-                HttpResponse {
-                    status: HttpStatus::BAD_REQUEST,
-                    headers: HashMap::new(),
-                    body: None,
-                },
-            );
-        }
-    };
+    let request = http_request::parse(stream)
+        .context("Failed to parse HTTP request")
+        .unwrap();
+    let response = handle_request(&request);
+    http_response::send(stream, response);
 }
 
 fn handle_request(request: &HttpRequest) -> HttpResponse {
