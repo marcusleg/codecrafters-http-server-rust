@@ -8,6 +8,10 @@ impl HttpStatus {
         code: 200,
         text: "OK",
     };
+    pub(crate) const CREATED: HttpStatus = HttpStatus {
+        code: 201,
+        text: "Created",
+    };
     pub(crate) const BAD_REQUEST: HttpStatus = HttpStatus {
         code: 400,
         text: "Bad Request",

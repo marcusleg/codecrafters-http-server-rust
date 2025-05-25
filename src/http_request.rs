@@ -1,12 +1,13 @@
 use anyhow::{anyhow, Context, Result};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::net::TcpStream;
 
 pub struct HttpRequest {
     pub(crate) method: String,
     pub(crate) path: String,
     pub(crate) headers: HashMap<String, String>,
+    pub(crate) body: Option<Vec<u8>>,
 }
 
 struct RequestLine {
@@ -19,6 +20,7 @@ pub fn parse(stream: &mut TcpStream) -> Result<HttpRequest> {
         method: String::new(),
         path: String::new(),
         headers: HashMap::new(),
+        body: None,
     };
 
     let mut reader = BufReader::new(&*stream);
@@ -29,6 +31,13 @@ pub fn parse(stream: &mut TcpStream) -> Result<HttpRequest> {
     println!("Received {} request for {}", request.method, request.path);
 
     request.headers = parse_headers(&mut reader).context("Failed to parse headers")?;
+
+    let content_length = request.headers.get("content-length");
+    if content_length.is_some() {
+        let content_length: usize = content_length.unwrap().parse().unwrap();
+        let body = parse_body(&mut reader, content_length).context("Failed to parse body")?;
+        request.body = Some(body);
+    }
 
     Ok(request)
 }
@@ -83,4 +92,12 @@ fn parse_headers(reader: &mut BufReader<&TcpStream>) -> Result<HashMap<String, S
     }
 
     Ok(headers)
+}
+
+fn parse_body(reader: &mut BufReader<&TcpStream>, content_length: usize) -> Result<Vec<u8>> {
+    let mut buffer = vec![0; content_length];
+    reader
+        .read_exact(&mut buffer)
+        .context("Failed to read body")?;
+    Ok(buffer)
 }
