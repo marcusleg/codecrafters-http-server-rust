@@ -12,7 +12,6 @@ pub struct HttpRequest {
 struct RequestLine {
     method: String,
     path: String,
-    protocol: String,
 }
 
 pub fn parse(stream: &mut TcpStream) -> Result<HttpRequest> {
@@ -45,7 +44,6 @@ fn parse_request_line(request_line: String) -> Result<RequestLine> {
         Ok(RequestLine {
             method: parts.get(0).unwrap().to_string(),
             path: parts.get(1).unwrap().to_string(),
-            protocol: parts.get(2).unwrap().to_string(),
         })
     } else {
         Err(anyhow!("Invalid request line: {}", request_line))
