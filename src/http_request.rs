@@ -34,7 +34,10 @@ pub fn parse(stream: &mut TcpStream) -> Result<HttpRequest> {
 
     let content_length = request.headers.get("content-length");
     if content_length.is_some() {
-        let content_length: usize = content_length.unwrap().parse().unwrap();
+        let content_length: usize = content_length
+            .context("Unable to read Content-Length header")?
+            .parse()
+            .context("Unable to parse Content-Length header")?;
         let body = parse_body(&mut reader, content_length).context("Failed to parse body")?;
         request.body = Some(body);
     }
