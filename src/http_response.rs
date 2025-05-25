@@ -1,5 +1,6 @@
 use crate::http_status::HttpStatus;
 use crate::HttpBody;
+use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::io::Write;
 use std::net::TcpStream;
@@ -10,13 +11,15 @@ pub struct HttpResponse {
     pub(crate) body: Option<HttpBody>,
 }
 
-pub fn send(stream: &mut TcpStream, mut response: HttpResponse) {
+pub fn send(stream: &mut TcpStream, mut response: HttpResponse) -> Result<()> {
     // send status line
     let status_line = format!(
         "HTTP/1.1 {} {}\r\n",
         response.status.code, response.status.text
     );
-    stream.write_all(status_line.as_bytes()).unwrap();
+    stream
+        .write_all(status_line.as_bytes())
+        .context("Failed to send status line")?;
 
     // send headers
     if response.headers.get("Content-Type").is_none() {
@@ -42,15 +45,23 @@ pub fn send(stream: &mut TcpStream, mut response: HttpResponse) {
         .map(|(k, v)| format!("{}: {}\r\n", k, v))
         .collect::<Vec<String>>()
         .join("");
-    stream.write_all(headers_string.as_bytes()).unwrap();
+    stream
+        .write_all(headers_string.as_bytes())
+        .context("Failed to send headers")?;
 
     // send empty line indicating the headers are complete
-    stream.write_all("\r\n".as_bytes()).unwrap();
+    stream
+        .write_all("\r\n".as_bytes())
+        .context("Failed to send empty line")?;
 
     // send body
     match response.body {
         None => {}
-        Some(HttpBody::Text(text)) => stream.write_all(text.as_bytes()).unwrap(),
-        Some(HttpBody::Binary(bytes)) => stream.write_all(&bytes).unwrap(),
+        Some(HttpBody::Text(text)) => stream
+            .write_all(text.as_bytes())
+            .context("Failed to send body")?,
+        Some(HttpBody::Binary(bytes)) => stream.write_all(&bytes).context("Failed to send body")?,
     };
+
+    Ok(())
 }

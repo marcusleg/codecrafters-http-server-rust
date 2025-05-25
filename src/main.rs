@@ -30,16 +30,20 @@ static FILES_DIRECTORY: OnceLock<Option<String>> = OnceLock::new();
 
 fn main() {
     let args = Args::parse();
-    FILES_DIRECTORY.set(args.directory).unwrap();
+    FILES_DIRECTORY
+        .set(args.directory)
+        .expect("Failed to set files directory");
 
-    let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:4221").expect("Failed to bind to port");
 
     for stream in listener.incoming() {
         match stream {
             Ok(mut stream) => {
                 thread::spawn(move || {
                     println!("accepted new connection");
-                    handle_connection(&mut stream);
+                    if let Err(e) = handle_connection(&mut stream) {
+                        eprintln!("Error handling connection: {}", e);
+                    }
                 });
             }
             Err(e) => {
@@ -49,7 +53,7 @@ fn main() {
     }
 }
 
-fn handle_connection(stream: &mut TcpStream) {
+fn handle_connection(stream: &mut TcpStream) -> Result<()> {
     let request = match http_request::parse(stream) {
         Ok(request) => request,
         Err(_) => {
@@ -60,8 +64,9 @@ fn handle_connection(stream: &mut TcpStream) {
                     headers: HashMap::new(),
                     body: None,
                 },
-            );
-            return;
+            )
+            .context("Failed to send response")?;
+            return Ok(());
         }
     };
 
@@ -71,7 +76,8 @@ fn handle_connection(stream: &mut TcpStream) {
         body: None,
     });
 
-    http_response::send(stream, response);
+    http_response::send(stream, response).context("Failed to send response")?;
+    Ok(())
 }
 
 fn handle_request(request: &HttpRequest) -> Result<HttpResponse> {
