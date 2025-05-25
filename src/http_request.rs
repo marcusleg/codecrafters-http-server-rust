@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
@@ -22,15 +22,11 @@ pub fn parse(stream: &mut TcpStream) -> Result<HttpRequest> {
     let request_line = lines
         .next()
         .ok_or_else(|| anyhow::anyhow!("Failed to read request line"))??;
-    let parts: Vec<&str> = request_line.split(" ").collect();
-    if parts.len() >= 2 {
-        request.method = parts.get(0).unwrap().to_string();
-        request.path = parts.get(1).unwrap().to_string();
-
-        println!("Received {} request for {}", request.method, request.path);
-    } else {
-        return Err(anyhow!("Invalid request line: {}", request_line));
-    }
+    let parsed_request_line =
+        parse_request_line(request_line).context("Failed to parse request line")?;
+    request.method = parsed_request_line.0;
+    request.path = parsed_request_line.1;
+    println!("Received {} request for {}", request.method, request.path);
 
     for line in lines {
         match line {
@@ -57,4 +53,16 @@ pub fn parse(stream: &mut TcpStream) -> Result<HttpRequest> {
     }
 
     Ok(request)
+}
+
+fn parse_request_line(request_line: String) -> Result<(String, String)> {
+    let parts: Vec<&str> = request_line.split(" ").collect();
+    if parts.len() >= 2 {
+        Ok((
+            parts.get(0).unwrap().to_string(),
+            parts.get(1).unwrap().to_string(),
+        ))
+    } else {
+        Err(anyhow!("Invalid request line: {}", request_line))
+    }
 }
