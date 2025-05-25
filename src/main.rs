@@ -1,12 +1,14 @@
 use clap::Parser;
+use http_request::HttpRequest;
 use http_status::HttpStatus;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 use std::sync::OnceLock;
 use std::thread;
 
+mod http_request;
 mod http_status;
 
 #[derive(Parser, Debug)]
@@ -14,12 +16,6 @@ mod http_status;
 struct Args {
     #[arg(short, long)]
     directory: Option<String>,
-}
-
-struct HttpRequest {
-    method: String,
-    path: String,
-    headers: HashMap<String, String>,
 }
 
 enum HttpBody {
@@ -57,55 +53,9 @@ fn main() {
 }
 
 fn handle_connection(stream: &mut TcpStream) {
-    let request = parse_request(stream);
+    let request = http_request::parse(stream);
     let response = handle_request(&request);
     send_response(stream, response);
-}
-
-fn parse_request(stream: &mut TcpStream) -> HttpRequest {
-    let mut request = HttpRequest {
-        method: String::new(),
-        path: String::new(),
-        headers: HashMap::new(),
-    };
-
-    let reader = BufReader::new(&*stream);
-    let mut line_count: usize = 0;
-    for line in reader.lines() {
-        match line {
-            Ok(line) => {
-                if line.trim().is_empty() {
-                    break;
-                } else if line_count == 0 {
-                    let parts: Vec<&str> = line.split(" ").collect();
-                    if parts.len() < 2 {
-                        println!("Invalid HTTP request received.");
-                        break;
-                    }
-                    request.method = parts[0].to_string();
-                    request.path = parts[1].to_string();
-                    println!("Received {} request for {}", request.method, request.path);
-                } else if line.contains(": ") {
-                    let parts: Vec<&str> = line.split(": ").collect();
-                    if parts.len() == 2 {
-                        request
-                            .headers
-                            .insert(parts[0].to_string().to_lowercase(), parts[1].to_string());
-                    }
-                    println!("Received header: {}", line)
-                } else {
-                    println!("Received unknown line: {}", line)
-                }
-            }
-            Err(e) => {
-                println!("Failed to read from connection: {}", e);
-                break;
-            }
-        }
-        line_count = line_count + 1;
-    }
-
-    request
 }
 
 fn handle_request(request: &HttpRequest) -> HttpResponse {
