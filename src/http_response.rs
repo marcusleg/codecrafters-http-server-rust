@@ -1,13 +1,13 @@
+use crate::http_headers::HttpHeaders;
 use crate::http_status::HttpStatus;
 use crate::HttpBody;
 use anyhow::{Context, Result};
-use std::collections::HashMap;
 use std::io::Write;
 use std::net::TcpStream;
 
 pub struct HttpResponse {
     pub(crate) status: HttpStatus,
-    pub(crate) headers: HashMap<String, String>,
+    pub(crate) headers: HttpHeaders,
     pub(crate) body: Option<HttpBody>,
 }
 

@@ -1,12 +1,12 @@
+use crate::http_headers::HttpHeaders;
 use anyhow::{anyhow, Context, Result};
-use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read};
 use std::net::TcpStream;
 
 pub struct HttpRequest {
     pub(crate) method: String,
     pub(crate) path: String,
-    pub(crate) headers: HashMap<String, String>,
+    pub(crate) headers: HttpHeaders,
     pub(crate) body: Option<Vec<u8>>,
 }
 
@@ -19,7 +19,7 @@ pub fn parse(stream: &mut TcpStream) -> Result<HttpRequest> {
     let mut request = HttpRequest {
         method: String::new(),
         path: String::new(),
-        headers: HashMap::new(),
+        headers: HttpHeaders::new(),
         body: None,
     };
 
@@ -67,8 +67,8 @@ fn parse_request_line(reader: &mut BufReader<&TcpStream>) -> Result<RequestLine>
     }
 }
 
-fn parse_headers(reader: &mut BufReader<&TcpStream>) -> Result<HashMap<String, String>> {
-    let mut headers = HashMap::new();
+fn parse_headers(reader: &mut BufReader<&TcpStream>) -> Result<HttpHeaders> {
+    let mut headers = HttpHeaders::new();
     let mut buffer = String::new();
 
     loop {

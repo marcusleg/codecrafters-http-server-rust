@@ -1,15 +1,16 @@
+use crate::http_headers::HttpHeaders;
 use anyhow::{Context, Result};
 use clap::Parser;
 use http_request::HttpRequest;
 use http_response::HttpResponse;
 use http_status::HttpStatus;
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 use std::sync::OnceLock;
 use std::thread;
 
+mod http_headers;
 mod http_request;
 mod http_response;
 mod http_status;
@@ -61,7 +62,7 @@ fn handle_connection(stream: &mut TcpStream) -> Result<()> {
                 stream,
                 HttpResponse {
                     status: HttpStatus::BAD_REQUEST,
-                    headers: HashMap::new(),
+                    headers: HttpHeaders::new(),
                     body: None,
                 },
             )
@@ -72,7 +73,7 @@ fn handle_connection(stream: &mut TcpStream) -> Result<()> {
 
     let response = handle_request(&request).unwrap_or_else(|_| HttpResponse {
         status: HttpStatus::INTERNAL_SERVER_ERROR,
-        headers: HashMap::new(),
+        headers: HttpHeaders::new(),
         body: None,
     });
 
@@ -86,7 +87,7 @@ fn handle_request(request: &HttpRequest) -> Result<HttpResponse> {
             if request.path == "/" || request.path == "/index.html" {
                 Ok(HttpResponse {
                     status: HttpStatus::OK,
-                    headers: HashMap::new(),
+                    headers: HttpHeaders::new(),
                     body: None,
                 })
             } else if request.path.starts_with("/echo/") {
@@ -98,7 +99,7 @@ fn handle_request(request: &HttpRequest) -> Result<HttpResponse> {
             } else {
                 Ok(HttpResponse {
                     status: HttpStatus::NOT_FOUND,
-                    headers: HashMap::new(),
+                    headers: HttpHeaders::new(),
                     body: None,
                 })
             }
@@ -109,14 +110,14 @@ fn handle_request(request: &HttpRequest) -> Result<HttpResponse> {
             } else {
                 Ok(HttpResponse {
                     status: HttpStatus::NOT_FOUND,
-                    headers: HashMap::new(),
+                    headers: HttpHeaders::new(),
                     body: None,
                 })
             }
         }
         _ => Ok(HttpResponse {
             status: HttpStatus::METHOD_NOT_ALLOWED,
-            headers: HashMap::new(),
+            headers: HttpHeaders::new(),
             body: None,
         }),
     }
@@ -130,7 +131,7 @@ fn handle_get_echo(request: &HttpRequest) -> Result<HttpResponse> {
 
     Ok(HttpResponse {
         status: HttpStatus::OK,
-        headers: HashMap::from([("Content-Type".to_string(), "text/plain".to_string())]),
+        headers: HttpHeaders::from([("Content-Type".to_string(), "text/plain".to_string())]),
         body: Some(HttpBody::Text(response_body.to_string())),
     })
 }
@@ -140,7 +141,7 @@ fn handle_get_files(request: &HttpRequest) -> Result<HttpResponse> {
     if files_directory.is_none() {
         return Ok(HttpResponse {
             status: HttpStatus::NOT_FOUND,
-            headers: HashMap::new(),
+            headers: HttpHeaders::new(),
             body: None,
         });
     }
@@ -157,7 +158,7 @@ fn handle_get_files(request: &HttpRequest) -> Result<HttpResponse> {
     match std::fs::read(&file_path) {
         Ok(contents) => Ok(HttpResponse {
             status: HttpStatus::OK,
-            headers: HashMap::from([(
+            headers: HttpHeaders::from([(
                 "Content-Type".to_string(),
                 "application/octet-stream".to_string(),
             )]),
@@ -167,7 +168,7 @@ fn handle_get_files(request: &HttpRequest) -> Result<HttpResponse> {
             if e.kind() == std::io::ErrorKind::NotFound {
                 Ok(HttpResponse {
                     status: HttpStatus::NOT_FOUND,
-                    headers: HashMap::new(),
+                    headers: HttpHeaders::new(),
                     body: None,
                 })
             } else {
@@ -185,7 +186,7 @@ fn handle_get_user_agent(request: &HttpRequest) -> Result<HttpResponse> {
 
     Ok(HttpResponse {
         status: HttpStatus::OK,
-        headers: HashMap::from([("Content-Type".to_string(), "text/plain".to_string())]),
+        headers: HttpHeaders::from([("Content-Type".to_string(), "text/plain".to_string())]),
         body: Some(HttpBody::Text(user_agent.to_string())),
     })
 }
@@ -199,7 +200,7 @@ fn handle_post_files(request: &HttpRequest) -> Result<HttpResponse> {
     {
         return Ok(HttpResponse {
             status: HttpStatus::BAD_REQUEST,
-            headers: HashMap::new(),
+            headers: HttpHeaders::new(),
             body: None,
         });
     }
@@ -222,7 +223,7 @@ fn handle_post_files(request: &HttpRequest) -> Result<HttpResponse> {
 
     Ok(HttpResponse {
         status: HttpStatus::CREATED,
-        headers: HashMap::new(),
+        headers: HttpHeaders::new(),
         body: None,
     })
 }
