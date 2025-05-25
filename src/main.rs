@@ -1,14 +1,15 @@
 use clap::Parser;
 use http_request::HttpRequest;
+use http_response::HttpResponse;
 use http_status::HttpStatus;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 use std::sync::OnceLock;
 use std::thread;
 
 mod http_request;
+mod http_response;
 mod http_status;
 
 #[derive(Parser, Debug)]
@@ -21,12 +22,6 @@ struct Args {
 enum HttpBody {
     Text(String),
     Binary(Vec<u8>),
-}
-
-struct HttpResponse {
-    status: HttpStatus,
-    headers: HashMap<String, String>,
-    body: Option<HttpBody>,
 }
 
 static FILES_DIRECTORY: OnceLock<Option<String>> = OnceLock::new();
@@ -55,7 +50,7 @@ fn main() {
 fn handle_connection(stream: &mut TcpStream) {
     let request = http_request::parse(stream);
     let response = handle_request(&request);
-    send_response(stream, response);
+    http_response::send(stream, response);
 }
 
 fn handle_request(request: &HttpRequest) -> HttpResponse {
@@ -87,51 +82,6 @@ fn handle_request(request: &HttpRequest) -> HttpResponse {
             body: None,
         },
     }
-}
-
-fn send_response(stream: &mut TcpStream, mut response: HttpResponse) {
-    // send status line
-    let status_line = format!(
-        "HTTP/1.1 {} {}\r\n",
-        response.status.code, response.status.text
-    );
-    stream.write_all(status_line.as_bytes()).unwrap();
-
-    // send headers
-    if response.headers.get("Content-Type").is_none() {
-        response
-            .headers
-            .insert("Content-Type".to_string(), "text/plain".to_string());
-    }
-
-    let content_length = match response.body {
-        None => 0,
-        Some(ref content) => match content {
-            HttpBody::Text(text) => text.len(),
-            HttpBody::Binary(bytes) => bytes.len(),
-        },
-    };
-    response
-        .headers
-        .insert("Content-Length".to_string(), content_length.to_string());
-
-    let headers_string = response
-        .headers
-        .iter()
-        .map(|(k, v)| format!("{}: {}\r\n", k, v))
-        .collect::<Vec<String>>()
-        .join("");
-    stream.write_all(headers_string.as_bytes()).unwrap();
-
-    // send empty line indicating the headers are complete
-    stream.write_all("\r\n".as_bytes()).unwrap();
-
-    // send body
-    match response.body {
-        None => {}
-        Some(HttpBody::Text(text)) => stream.write_all(text.as_bytes()).unwrap(),
-        Some(HttpBody::Binary(bytes)) => stream.write_all(&bytes).unwrap(),
-    };
 }
 
 fn handle_get_echo(request: &HttpRequest) -> HttpResponse {
