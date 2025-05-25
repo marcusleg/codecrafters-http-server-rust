@@ -148,6 +148,14 @@ fn handle_request(stream: &mut TcpStream, request: &HttpRequest) {
 }
 
 fn send_response(stream: &mut TcpStream, mut response: HttpResponse) {
+    // send status line
+    let status_line = format!(
+        "HTTP/1.1 {} {}\r\n",
+        response.status.code, response.status.text
+    );
+    stream.write_all(status_line.as_bytes()).unwrap();
+
+    // send headers
     if response.headers.get("Content-Type").is_none() {
         response
             .headers
@@ -171,32 +179,17 @@ fn send_response(stream: &mut TcpStream, mut response: HttpResponse) {
         .map(|(k, v)| format!("{}: {}\r\n", k, v))
         .collect::<Vec<String>>()
         .join("");
+    stream.write_all(headers_string.as_bytes()).unwrap();
 
-    let response_string = match response.body {
-        None => {
-            format!(
-                "HTTP/1.1 {} {}\r\n{}\r\n",
-                response.status.code, response.status.text, headers_string
-            )
-        }
-        Some(HttpBody::Text(text)) => {
-            format!(
-                "HTTP/1.1 {} {}\r\n{}\r\n{}",
-                response.status.code, response.status.text, headers_string, text
-            )
-        }
-        Some(HttpBody::Binary(bytes)) => {
-            let response_headers = format!(
-                "HTTP/1.1 {} {}\r\n{}\r\n",
-                response.status.code, response.status.text, headers_string
-            );
-            stream.write_all(response_headers.as_bytes()).unwrap();
-            stream.write_all(&bytes).unwrap();
-            return;
-        }
+    // send empty line indicating the headers are complete
+    stream.write_all("\r\n".as_bytes()).unwrap();
+
+    // send body
+    match response.body {
+        None => {}
+        Some(HttpBody::Text(text)) => stream.write_all(text.as_bytes()).unwrap(),
+        Some(HttpBody::Binary(bytes)) => stream.write_all(&bytes).unwrap(),
     };
-
-    stream.write_all(response_string.as_bytes()).unwrap();
 }
 
 fn handle_get_echo(stream: &mut TcpStream, request: &HttpRequest) {
