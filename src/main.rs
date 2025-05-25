@@ -50,14 +50,27 @@ fn main() {
 }
 
 fn handle_connection(stream: &mut TcpStream) {
-    let request = http_request::parse(stream)
-        .context("Failed to parse HTTP request")
-        .unwrap();
+    let request = match http_request::parse(stream) {
+        Ok(request) => request,
+        Err(_) => {
+            http_response::send(
+                stream,
+                HttpResponse {
+                    status: HttpStatus::BAD_REQUEST,
+                    headers: HashMap::new(),
+                    body: None,
+                },
+            );
+            return;
+        }
+    };
+
     let response = handle_request(&request).unwrap_or_else(|_| HttpResponse {
         status: HttpStatus::INTERNAL_SERVER_ERROR,
         headers: HashMap::new(),
         body: None,
     });
+
     http_response::send(stream, response);
 }
 
