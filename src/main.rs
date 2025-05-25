@@ -157,30 +157,36 @@ fn send_response(stream: &mut TcpStream, response: HttpResponse) {
         None => {
             headers.insert("Content-Length".to_string(), "0".to_string());
 
+            let headers_string = headers
+                .iter()
+                .map(|(k, v)| format!("{}: {}\r\n", k, v))
+                .collect::<Vec<String>>()
+                .join("");
             format!(
-                "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: 0\r\n\r\n",
-                response.status.code,
-                response.status.text,
-                headers.get("Content-Type").unwrap()
+                "HTTP/1.1 {} {}\r\n{}\r\n",
+                response.status.code, response.status.text, headers_string
             )
         }
         Some(HttpBody::Text(text)) => {
+            let headers_string = headers
+                .iter()
+                .map(|(k, v)| format!("{}: {}\r\n", k, v))
+                .collect::<Vec<String>>()
+                .join("");
             format!(
-                "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n{}",
-                response.status.code,
-                response.status.text,
-                headers.get("Content-Type").unwrap(),
-                text.len(),
-                text
+                "HTTP/1.1 {} {}\r\n{}\r\n{}",
+                response.status.code, response.status.text, headers_string, text
             )
         }
         Some(HttpBody::Binary(bytes)) => {
+            let headers_string = headers
+                .iter()
+                .map(|(k, v)| format!("{}: {}\r\n", k, v))
+                .collect::<Vec<String>>()
+                .join("");
             let response_headers = format!(
-                "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n",
-                response.status.code,
-                response.status.text,
-                headers.get("Content-Type").unwrap(),
-                bytes.len()
+                "HTTP/1.1 {} {}\r\n{}\r\n",
+                response.status.code, response.status.text, headers_string
             );
             stream.write_all(response_headers.as_bytes()).unwrap();
             stream.write_all(&bytes).unwrap();
