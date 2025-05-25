@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Lines};
 use std::net::TcpStream;
 
 pub struct HttpRequest {
@@ -34,29 +34,7 @@ pub fn parse(stream: &mut TcpStream) -> Result<HttpRequest> {
     request.path = parsed_request_line.path;
     println!("Received {} request for {}", request.method, request.path);
 
-    for line in lines {
-        match line {
-            Ok(line) => {
-                if line.trim().is_empty() {
-                    break;
-                } else if line.contains(": ") {
-                    let parts: Vec<&str> = line.split(": ").collect();
-                    if parts.len() == 2 {
-                        request
-                            .headers
-                            .insert(parts[0].to_string().to_lowercase(), parts[1].to_string());
-                    }
-                    println!("Received header: {}", line)
-                } else {
-                    println!("Received unknown line: {}", line)
-                }
-            }
-            Err(e) => {
-                println!("Failed to read from connection: {}", e);
-                break;
-            }
-        }
-    }
+    request.headers = parse_headers(&mut lines).context("Failed to parse headers")?;
 
     Ok(request)
 }
@@ -72,4 +50,32 @@ fn parse_request_line(request_line: String) -> Result<RequestLine> {
     } else {
         Err(anyhow!("Invalid request line: {}", request_line))
     }
+}
+
+fn parse_headers(lines: &mut Lines<BufReader<&TcpStream>>) -> Result<HashMap<String, String>> {
+    let mut headers = HashMap::new();
+
+    for line in lines {
+        match line {
+            Ok(line) => {
+                if line.trim().is_empty() {
+                    break;
+                } else if line.contains(": ") {
+                    let parts: Vec<&str> = line.split(": ").collect();
+                    if parts.len() == 2 {
+                        headers.insert(parts[0].to_string().to_lowercase(), parts[1].to_string());
+                    }
+                    println!("Received header: {}", line)
+                } else {
+                    println!("Received unknown line: {}", line)
+                }
+            }
+            Err(e) => {
+                println!("Failed to read from connection: {}", e);
+                break;
+            }
+        }
+    }
+
+    Ok(headers)
 }
