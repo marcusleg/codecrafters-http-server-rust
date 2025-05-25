@@ -147,43 +147,45 @@ fn handle_request(stream: &mut TcpStream, request: &HttpRequest) {
     }
 }
 
-fn send_response(stream: &mut TcpStream, response: HttpResponse) {
-    let mut headers = response.headers;
-    if headers.get("Content-Type").is_none() {
-        headers.insert("Content-Type".to_string(), "text/plain".to_string());
+fn send_response(stream: &mut TcpStream, mut response: HttpResponse) {
+    if response.headers.get("Content-Type").is_none() {
+        response
+            .headers
+            .insert("Content-Type".to_string(), "text/plain".to_string());
     }
+
+    let content_length = match response.body {
+        None => 0,
+        Some(ref content) => match content {
+            HttpBody::Text(text) => text.len(),
+            HttpBody::Binary(bytes) => bytes.len(),
+        },
+    };
+    response
+        .headers
+        .insert("Content-Length".to_string(), content_length.to_string());
+
+    let headers_string = response
+        .headers
+        .iter()
+        .map(|(k, v)| format!("{}: {}\r\n", k, v))
+        .collect::<Vec<String>>()
+        .join("");
 
     let response_string = match response.body {
         None => {
-            headers.insert("Content-Length".to_string(), "0".to_string());
-
-            let headers_string = headers
-                .iter()
-                .map(|(k, v)| format!("{}: {}\r\n", k, v))
-                .collect::<Vec<String>>()
-                .join("");
             format!(
                 "HTTP/1.1 {} {}\r\n{}\r\n",
                 response.status.code, response.status.text, headers_string
             )
         }
         Some(HttpBody::Text(text)) => {
-            let headers_string = headers
-                .iter()
-                .map(|(k, v)| format!("{}: {}\r\n", k, v))
-                .collect::<Vec<String>>()
-                .join("");
             format!(
                 "HTTP/1.1 {} {}\r\n{}\r\n{}",
                 response.status.code, response.status.text, headers_string, text
             )
         }
         Some(HttpBody::Binary(bytes)) => {
-            let headers_string = headers
-                .iter()
-                .map(|(k, v)| format!("{}: {}\r\n", k, v))
-                .collect::<Vec<String>>()
-                .join("");
             let response_headers = format!(
                 "HTTP/1.1 {} {}\r\n{}\r\n",
                 response.status.code, response.status.text, headers_string
