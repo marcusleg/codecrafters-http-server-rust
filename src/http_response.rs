@@ -17,7 +17,7 @@ pub fn send(stream: &mut TcpStream, mut response: HttpResponse) -> Result<()> {
     set_content_length_header(&mut response);
 
     send_headers(stream, &mut response.headers)?;
-    send_body(stream, &mut response)?;
+    send_body(stream, &mut response.body)?;
 
     Ok(())
 }
@@ -39,8 +39,8 @@ fn determine_content_length(body: &Option<HttpBody>) -> usize {
     }
 }
 
-fn send_body(stream: &mut TcpStream, response: &mut HttpResponse) -> Result<()> {
-    match &response.body {
+fn send_body(stream: &mut TcpStream, body: &mut Option<HttpBody>) -> Result<()> {
+    match &body {
         None => {}
         Some(HttpBody::Text(text)) => stream
             .write_all(text.as_bytes())
