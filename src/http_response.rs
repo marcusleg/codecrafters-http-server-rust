@@ -15,6 +15,7 @@ pub fn send(stream: &mut TcpStream, mut response: HttpResponse) -> Result<()> {
     send_status_line(stream, &mut response.status)?;
 
     set_content_length_header(&mut response);
+    set_content_type_header(&mut response);
 
     send_headers(stream, &mut response.headers)?;
     send_body(stream, &mut response.body)?;
@@ -31,11 +32,30 @@ fn set_content_length_header(response: &mut HttpResponse) {
     }
 }
 
+fn set_content_type_header(response: &mut HttpResponse) {
+    if response.headers.get("Content-Type").is_some() {
+        return;
+    }
+
+    let content_type = determine_content_type(&response.body);
+    response
+        .headers
+        .insert("Content-Type".to_string(), content_type);
+}
+
 fn determine_content_length(body: &Option<HttpBody>) -> usize {
     match body {
         None => 0,
         Some(HttpBody::Text(text)) => text.len(),
         Some(HttpBody::Binary(bytes)) => bytes.len(),
+    }
+}
+
+fn determine_content_type(body: &Option<HttpBody>) -> String {
+    match body {
+        None => "text/plain".to_string(),
+        Some(HttpBody::Text(_)) => "text/plain".to_string(),
+        Some(HttpBody::Binary(_)) => "application/octet-stream".to_string(),
     }
 }
 
@@ -58,12 +78,7 @@ fn send_status_line(stream: &mut TcpStream, status: &HttpStatus) -> Result<()> {
     Ok(())
 }
 
-fn send_headers(stream: &mut TcpStream, headers: &mut HttpHeaders) -> Result<()> {
-    // set default content type
-    if headers.get("Content-Type").is_none() {
-        headers.insert("Content-Type".to_string(), "text/plain".to_string());
-    }
-
+fn send_headers(stream: &mut TcpStream, headers: &HttpHeaders) -> Result<()> {
     let headers_string = headers
         .iter()
         .map(|(k, v)| format!("{}: {}\r\n", k, v))
