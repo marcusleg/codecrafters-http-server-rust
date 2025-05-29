@@ -13,10 +13,26 @@ pub struct HttpResponse {
 
 pub fn send(stream: &mut TcpStream, mut response: HttpResponse) -> Result<()> {
     send_status_line(stream, &mut response)?;
-    send_headers(stream, &mut response)?;
+
+    let content_lemgth = determine_content_length(&response.body);
+    if content_lemgth > 0 {
+        response
+            .headers
+            .insert("Content-Length".to_string(), content_lemgth.to_string());
+    }
+
+    send_headers(stream, &mut response.headers)?;
     send_body(stream, &mut response)?;
 
     Ok(())
+}
+
+fn determine_content_length(body: &Option<HttpBody>) -> usize {
+    match body {
+        None => 0,
+        Some(HttpBody::Text(text)) => text.len(),
+        Some(HttpBody::Binary(bytes)) => bytes.len(),
+    }
 }
 
 fn send_body(stream: &mut TcpStream, response: &mut HttpResponse) -> Result<()> {
@@ -41,28 +57,13 @@ fn send_status_line(stream: &mut TcpStream, response: &mut HttpResponse) -> Resu
     Ok(())
 }
 
-fn send_headers(stream: &mut TcpStream, response: &mut HttpResponse) -> Result<()> {
+fn send_headers(stream: &mut TcpStream, headers: &mut HttpHeaders) -> Result<()> {
     // set default content type
-    if response.headers.get("Content-Type").is_none() {
-        response
-            .headers
-            .insert("Content-Type".to_string(), "text/plain".to_string());
+    if headers.get("Content-Type").is_none() {
+        headers.insert("Content-Type".to_string(), "text/plain".to_string());
     }
 
-    let content_length = match response.body {
-        None => 0,
-        Some(ref content) => match content {
-            HttpBody::Text(text) => text.len(),
-            HttpBody::Binary(bytes) => bytes.len(),
-        },
-    };
-
-    response
-        .headers
-        .insert("Content-Length".to_string(), content_length.to_string());
-
-    let headers_string = response
-        .headers
+    let headers_string = headers
         .iter()
         .map(|(k, v)| format!("{}: {}\r\n", k, v))
         .collect::<Vec<String>>()
