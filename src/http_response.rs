@@ -59,7 +59,7 @@ fn determine_content_type(body: &Option<HttpBody>) -> String {
     }
 }
 
-fn send_body(stream: &mut TcpStream, body: &mut Option<HttpBody>) -> Result<()> {
+fn send_body(stream: &mut TcpStream, body: &Option<HttpBody>) -> Result<()> {
     match &body {
         None => {}
         Some(HttpBody::Text(text)) => stream
