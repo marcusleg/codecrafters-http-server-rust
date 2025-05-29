@@ -12,7 +12,7 @@ pub struct HttpResponse {
 }
 
 pub fn send(stream: &mut TcpStream, mut response: HttpResponse) -> Result<()> {
-    send_status_line(stream, &mut response)?;
+    send_status_line(stream, &mut response.status)?;
 
     set_content_length_header(&mut response);
 
@@ -50,11 +50,8 @@ fn send_body(stream: &mut TcpStream, body: &mut Option<HttpBody>) -> Result<()> 
     Ok(())
 }
 
-fn send_status_line(stream: &mut TcpStream, response: &mut HttpResponse) -> Result<()> {
-    let status_line = format!(
-        "HTTP/1.1 {} {}\r\n",
-        response.status.code, response.status.text
-    );
+fn send_status_line(stream: &mut TcpStream, status: &HttpStatus) -> Result<()> {
+    let status_line = format!("HTTP/1.1 {} {}\r\n", status.code, status.text);
     stream
         .write_all(status_line.as_bytes())
         .context("Failed to send status line")?;
