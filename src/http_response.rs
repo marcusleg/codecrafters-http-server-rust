@@ -75,16 +75,16 @@ fn set_content_type_header(response: &mut HttpResponse) {
 }
 
 fn determine_content_encoding(request_headers: &HttpHeaders) -> ContentEncoding {
-    match request_headers.get("accept-encoding") {
-        None => ContentEncoding::None,
-        Some(value) => {
-            if value.contains("gzip") {
-                ContentEncoding::Gzip
-            } else {
-                ContentEncoding::None
-            }
-        }
+    let accept_encoding = request_headers.get("accept-encoding");
+    if accept_encoding.is_none() {
+        return ContentEncoding::None;
     }
+
+    let mut encodings = accept_encoding.unwrap().split(", ");
+    if encodings.find(|s| s.contains("gzip")).is_some() {
+        return ContentEncoding::Gzip;
+    }
+    ContentEncoding::None
 }
 
 fn determine_content_length(body: &Option<HttpBody>) -> usize {
