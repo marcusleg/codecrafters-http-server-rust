@@ -57,6 +57,7 @@ fn handle_connection(stream: &mut TcpStream) -> Result<()> {
         Err(_) => {
             http_response::send(
                 stream,
+                HttpHeaders::new(),
                 HttpResponse {
                     status: HttpStatus::BAD_REQUEST,
                     headers: HttpHeaders::new(),
@@ -74,7 +75,7 @@ fn handle_connection(stream: &mut TcpStream) -> Result<()> {
         body: None,
     });
 
-    http_response::send(stream, response).context("Failed to send response")?;
+    http_response::send(stream, request.headers, response).context("Failed to send response")?;
     Ok(())
 }
 

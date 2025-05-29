@@ -2,6 +2,8 @@ use crate::http_body::HttpBody;
 use crate::http_headers::HttpHeaders;
 use crate::http_status::HttpStatus;
 use anyhow::{Context, Result};
+use std::cmp::PartialEq;
+use std::fmt;
 use std::io::Write;
 use std::net::TcpStream;
 
@@ -11,9 +13,27 @@ pub struct HttpResponse {
     pub(crate) body: Option<HttpBody>,
 }
 
-pub fn send(stream: &mut TcpStream, mut response: HttpResponse) -> Result<()> {
+#[derive(Debug)]
+enum ContentEncoding {
+    None,
+    Gzip,
+}
+impl fmt::Display for ContentEncoding {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+pub fn send(
+    stream: &mut TcpStream,
+    request_headers: HttpHeaders,
+    mut response: HttpResponse,
+) -> Result<()> {
     send_status_line(stream, &mut response.status)?;
 
+    let content_encoding = determine_content_encoding(&request_headers);
+
+    set_content_encoding_header(&mut response, content_encoding);
     set_content_length_header(&mut response);
     set_content_type_header(&mut response);
 
@@ -21,6 +41,23 @@ pub fn send(stream: &mut TcpStream, mut response: HttpResponse) -> Result<()> {
     send_body(stream, &mut response.body)?;
 
     Ok(())
+}
+
+impl PartialEq for ContentEncoding {
+    fn eq(&self, other: &Self) -> bool {
+        std::mem::discriminant(self) == std::mem::discriminant(other)
+    }
+}
+
+fn set_content_encoding_header(response: &mut HttpResponse, content_encoding: ContentEncoding) {
+    if content_encoding == ContentEncoding::None {
+        return;
+    }
+
+    response.headers.insert(
+        "Content-Encoding".to_string(),
+        content_encoding.to_string().to_lowercase(),
+    );
 }
 
 fn set_content_length_header(response: &mut HttpResponse) {
@@ -41,6 +78,19 @@ fn set_content_type_header(response: &mut HttpResponse) {
     response
         .headers
         .insert("Content-Type".to_string(), content_type);
+}
+
+fn determine_content_encoding(request_headers: &HttpHeaders) -> ContentEncoding {
+    match request_headers.get("accept-encoding") {
+        None => ContentEncoding::None,
+        Some(value) => {
+            if value.contains("gzip") {
+                ContentEncoding::Gzip
+            } else {
+                ContentEncoding::None
+            }
+        }
+    }
 }
 
 fn determine_content_length(body: &Option<HttpBody>) -> usize {
