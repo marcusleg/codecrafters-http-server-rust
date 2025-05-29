@@ -2,7 +2,6 @@ use crate::http_body::HttpBody;
 use crate::http_headers::HttpHeaders;
 use crate::http_status::HttpStatus;
 use anyhow::{Context, Result};
-use std::cmp::PartialEq;
 use std::fmt;
 use std::io::Write;
 use std::net::TcpStream;
@@ -13,11 +12,12 @@ pub struct HttpResponse {
     pub(crate) body: Option<HttpBody>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum ContentEncoding {
     None,
     Gzip,
 }
+
 impl fmt::Display for ContentEncoding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
@@ -41,12 +41,6 @@ pub fn send(
     send_body(stream, &mut response.body)?;
 
     Ok(())
-}
-
-impl PartialEq for ContentEncoding {
-    fn eq(&self, other: &Self) -> bool {
-        std::mem::discriminant(self) == std::mem::discriminant(other)
-    }
 }
 
 fn set_content_encoding_header(response: &mut HttpResponse, content_encoding: ContentEncoding) {
