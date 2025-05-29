@@ -14,17 +14,21 @@ pub struct HttpResponse {
 pub fn send(stream: &mut TcpStream, mut response: HttpResponse) -> Result<()> {
     send_status_line(stream, &mut response)?;
 
+    set_content_length_header(&mut response);
+
+    send_headers(stream, &mut response.headers)?;
+    send_body(stream, &mut response)?;
+
+    Ok(())
+}
+
+fn set_content_length_header(response: &mut HttpResponse) {
     let content_lemgth = determine_content_length(&response.body);
     if content_lemgth > 0 {
         response
             .headers
             .insert("Content-Length".to_string(), content_lemgth.to_string());
     }
-
-    send_headers(stream, &mut response.headers)?;
-    send_body(stream, &mut response)?;
-
-    Ok(())
 }
 
 fn determine_content_length(body: &Option<HttpBody>) -> usize {
