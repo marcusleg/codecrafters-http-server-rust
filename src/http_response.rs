@@ -1,6 +1,6 @@
+use crate::http_body::HttpBody;
 use crate::http_headers::HttpHeaders;
 use crate::http_status::HttpStatus;
-use crate::HttpBody;
 use anyhow::{Context, Result};
 use std::io::Write;
 use std::net::TcpStream;

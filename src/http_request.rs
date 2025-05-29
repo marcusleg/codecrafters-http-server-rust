@@ -1,3 +1,4 @@
+use crate::http_body::HttpBody;
 use crate::http_headers::HttpHeaders;
 use anyhow::{anyhow, Context, Result};
 use std::io::{BufRead, BufReader, Read};
@@ -7,7 +8,7 @@ pub struct HttpRequest {
     pub(crate) method: String,
     pub(crate) path: String,
     pub(crate) headers: HttpHeaders,
-    pub(crate) body: Option<Vec<u8>>,
+    pub(crate) body: Option<HttpBody>,
 }
 
 struct RequestLine {
@@ -97,10 +98,12 @@ fn parse_headers(reader: &mut BufReader<&TcpStream>) -> Result<HttpHeaders> {
     Ok(headers)
 }
 
-fn parse_body(reader: &mut BufReader<&TcpStream>, content_length: usize) -> Result<Vec<u8>> {
+fn parse_body(reader: &mut BufReader<&TcpStream>, content_length: usize) -> Result<HttpBody> {
     let mut buffer = vec![0; content_length];
+
     reader
         .read_exact(&mut buffer)
         .context("Failed to read body")?;
-    Ok(buffer)
+
+    Ok(HttpBody::Binary(buffer))
 }

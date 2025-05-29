@@ -1,6 +1,7 @@
 use crate::http_headers::HttpHeaders;
 use anyhow::{Context, Result};
 use clap::Parser;
+use http_body::HttpBody;
 use http_request::HttpRequest;
 use http_response::HttpResponse;
 use http_status::HttpStatus;
@@ -10,6 +11,7 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::OnceLock;
 use std::thread;
 
+mod http_body;
 mod http_headers;
 mod http_request;
 mod http_response;
@@ -20,11 +22,6 @@ mod http_status;
 struct Args {
     #[arg(short, long)]
     directory: Option<String>,
-}
-
-enum HttpBody {
-    Text(String),
-    Binary(Vec<u8>),
 }
 
 static FILES_DIRECTORY: OnceLock<Option<String>> = OnceLock::new();
@@ -218,7 +215,7 @@ fn handle_post_files(request: &HttpRequest) -> Result<HttpResponse> {
     let file_path = format!("{}/{}", files_directory, file_name);
 
     let mut file = std::fs::File::create(&file_path).context("Failed to create file")?;
-    file.write_all(request.body.as_ref().unwrap())
+    file.write_all(request.body.as_ref().unwrap().as_bytes())
         .context("Failed to write file")?;
 
     Ok(HttpResponse {
