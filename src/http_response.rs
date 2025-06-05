@@ -2,6 +2,8 @@ use crate::http_body::HttpBody;
 use crate::http_headers::HttpHeaders;
 use crate::http_status::HttpStatus;
 use anyhow::{Context, Result};
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use std::fmt;
 use std::io::Write;
 use std::net::TcpStream;
@@ -32,6 +34,7 @@ pub fn send(
     send_status_line(stream, &mut response.status)?;
 
     let content_encoding = determine_content_encoding(&request_headers);
+    compress_body(&mut response.body, &content_encoding);
 
     set_content_encoding_header(&mut response, content_encoding);
     set_content_length_header(&mut response);
@@ -41,6 +44,25 @@ pub fn send(
     send_body(stream, &mut response.body)?;
 
     Ok(())
+}
+
+fn compress_body(response_body: &mut Option<HttpBody>, content_encoding: &ContentEncoding) {
+    if response_body.is_none() {
+        return;
+    }
+
+    match content_encoding {
+        ContentEncoding::None => return,
+        ContentEncoding::Gzip => {
+            let bytes = response_body.as_ref().unwrap().as_bytes();
+            let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+            encoder
+                .write_all(bytes)
+                .context("Failed to compress response body with gzip encoding");
+            let compressed_bytes = encoder.finish().context("Failed to finish gzip encoder");
+            *response_body = Some(HttpBody::Binary(compressed_bytes.unwrap()));
+        }
+    }
 }
 
 fn set_content_encoding_header(response: &mut HttpResponse, content_encoding: ContentEncoding) {
