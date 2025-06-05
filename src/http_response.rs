@@ -36,7 +36,6 @@ pub fn send(
     let content_encoding = determine_content_encoding(&request_headers);
     compress_body(&mut response, &content_encoding).context("Failed to compress body")?;
 
-    set_content_encoding_header(&mut response, content_encoding);
     set_content_length_header(&mut response);
     set_content_type_header(&mut response);
 
@@ -64,6 +63,7 @@ fn compress_body(response: &mut HttpResponse, content_encoding: &ContentEncoding
                 HttpBody::Binary(bytes) => compress_gzip(&bytes)?,
             };
             response.body = Some(HttpBody::Binary(compressed_data));
+            set_content_encoding_header(response, content_encoding);
         }
     }
 
@@ -80,8 +80,8 @@ fn compress_gzip(data: &[u8]) -> Result<Vec<u8>> {
         .context("Failed to finish gzip compression")
 }
 
-fn set_content_encoding_header(response: &mut HttpResponse, content_encoding: ContentEncoding) {
-    if content_encoding == ContentEncoding::None {
+fn set_content_encoding_header(response: &mut HttpResponse, content_encoding: &ContentEncoding) {
+    if *content_encoding == ContentEncoding::None {
         return;
     }
 
