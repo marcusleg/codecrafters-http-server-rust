@@ -34,7 +34,7 @@ pub fn send(
     send_status_line(stream, &mut response.status)?;
 
     let content_encoding = determine_content_encoding(&request_headers);
-    compress_body(&mut response.body, &content_encoding);
+    compress_body(&mut response, &content_encoding).context("Failed to compress body")?;
 
     set_content_encoding_header(&mut response, content_encoding);
     set_content_length_header(&mut response);
@@ -46,23 +46,38 @@ pub fn send(
     Ok(())
 }
 
-fn compress_body(response_body: &mut Option<HttpBody>, content_encoding: &ContentEncoding) {
-    if response_body.is_none() {
-        return;
+fn compress_body(response: &mut HttpResponse, content_encoding: &ContentEncoding) -> Result<()> {
+    if response.body.is_none() {
+        return Ok(());
     }
 
+    let bla = response
+        .body
+        .as_ref()
+        .context("Failed to take response body")?;
+
     match content_encoding {
-        ContentEncoding::None => return,
+        ContentEncoding::None => return Ok(()),
         ContentEncoding::Gzip => {
-            let bytes = response_body.as_ref().unwrap().as_bytes();
-            let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-            encoder
-                .write_all(bytes)
-                .context("Failed to compress response body with gzip encoding");
-            let compressed_bytes = encoder.finish().context("Failed to finish gzip encoder");
-            *response_body = Some(HttpBody::Binary(compressed_bytes.unwrap()));
+            let compressed_data = match bla {
+                HttpBody::Text(text) => compress_gzip(text.as_bytes())?,
+                HttpBody::Binary(bytes) => compress_gzip(&bytes)?,
+            };
+            response.body = Some(HttpBody::Binary(compressed_data));
         }
     }
+
+    Ok(())
+}
+
+fn compress_gzip(data: &[u8]) -> Result<Vec<u8>> {
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder
+        .write_all(data)
+        .context("Failed to write data to gzip encoder")?;
+    encoder
+        .finish()
+        .context("Failed to finish gzip compression")
 }
 
 fn set_content_encoding_header(response: &mut HttpResponse, content_encoding: ContentEncoding) {
