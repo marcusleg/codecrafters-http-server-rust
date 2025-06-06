@@ -17,6 +17,7 @@ pub struct HttpResponse {
 #[derive(Debug, PartialEq, Eq)]
 enum ContentEncoding {
     None,
+    Deflate,
     Gzip,
 }
 
@@ -50,24 +51,43 @@ fn compress_body(response: &mut HttpResponse, content_encoding: &ContentEncoding
         return Ok(());
     }
 
-    let bla = response
+    let body = response
         .body
         .as_ref()
         .context("Failed to take response body")?;
 
+    let compressed_data: Vec<u8>;
+
     match content_encoding {
         ContentEncoding::None => return Ok(()),
         ContentEncoding::Gzip => {
-            let compressed_data = match bla {
+            compressed_data = match body {
                 HttpBody::Text(text) => compress_gzip(text.as_bytes())?,
                 HttpBody::Binary(bytes) => compress_gzip(&bytes)?,
             };
-            response.body = Some(HttpBody::Binary(compressed_data));
-            set_content_encoding_header(response, content_encoding);
+        }
+        ContentEncoding::Deflate => {
+            compressed_data = match body {
+                HttpBody::Text(text) => compress_deflate(text.as_bytes())?,
+                HttpBody::Binary(bytes) => compress_deflate(&bytes)?,
+            };
         }
     }
 
+    response.body = Some(HttpBody::Binary(compressed_data));
+    set_content_encoding_header(response, content_encoding);
+
     Ok(())
+}
+
+fn compress_deflate(data: &[u8]) -> Result<Vec<u8>> {
+    let mut encoder = flate2::write::DeflateEncoder::new(Vec::new(), Compression::default());
+    encoder
+        .write_all(data)
+        .context("Failed to write data to deflate encoder")?;
+    encoder
+        .finish()
+        .context("Failed to finish deflate compression")
 }
 
 fn compress_gzip(data: &[u8]) -> Result<Vec<u8>> {
@@ -117,10 +137,17 @@ fn determine_content_encoding(request_headers: &HttpHeaders) -> ContentEncoding 
         return ContentEncoding::None;
     }
 
-    let mut encodings = accept_encoding.unwrap().split(", ");
-    if encodings.find(|s| s.contains("gzip")).is_some() {
-        return ContentEncoding::Gzip;
+    let encodings = accept_encoding.unwrap().split(",");
+
+    for encoding in encodings {
+        if encoding.trim().to_lowercase() == "gzip" {
+            return ContentEncoding::Gzip;
+        }
+        if encoding.trim().to_lowercase() == "deflate" {
+            return ContentEncoding::Deflate;
+        }
     }
+
     ContentEncoding::None
 }
 
